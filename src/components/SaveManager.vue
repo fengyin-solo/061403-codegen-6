@@ -36,9 +36,30 @@
                 :key="slot.name" 
                 class="slot-item"
               >
-                <div class="slot-info">
-                  <span class="slot-name">{{ slot.name === 'auto' ? '📅 自动存档' : slot.name }}</span>
-                  <span class="slot-meta">第 {{ slot.dayCount }} 天 · {{ formatDate(slot.savedAt) }}</span>
+                <div class="slot-main">
+                  <div class="slot-info">
+                    <span class="slot-name">{{ slot.name === 'auto' ? '📅 自动存档' : slot.name }}</span>
+                    <span class="slot-meta">第 {{ slot.dayCount }} 天 · {{ formatDate(slot.savedAt) }}</span>
+                  </div>
+                  <div class="slot-resources">
+                    <span class="res-item">🪵 {{ slot.wood || 0 }}</span>
+                    <span class="res-item">🍖 {{ slot.food || 0 }}</span>
+                    <span class="res-item">🔪 {{ slot.tools || 0 }}</span>
+                  </div>
+                  <div class="slot-shelter">
+                    <span class="shelter-badge">
+                      <span class="s-icon">🧱</span>
+                      <span class="s-level">Lv.{{ slot.wallLevel || 0 }}</span>
+                    </span>
+                    <span class="shelter-badge">
+                      <span class="s-icon">🛏️</span>
+                      <span class="s-level">Lv.{{ slot.bedLevel || 0 }}</span>
+                    </span>
+                    <span class="shelter-badge">
+                      <span class="s-icon">📦</span>
+                      <span class="s-level">Lv.{{ slot.storageLevel || 0 }}</span>
+                    </span>
+                  </div>
                 </div>
                 <div class="slot-actions">
                   <button class="action-btn load" @click="$emit('load', slot.name)">加载</button>
@@ -266,17 +287,26 @@ function formatDate(timestamp) {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 15px;
+}
+
+.slot-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .slot-info {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .slot-name {
   color: white;
   font-weight: bold;
+  font-size: 15px;
 }
 
 .slot-meta {
@@ -284,8 +314,48 @@ function formatDate(timestamp) {
   font-size: 12px;
 }
 
+.slot-resources {
+  display: flex;
+  gap: 10px;
+}
+
+.res-item {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.slot-shelter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.shelter-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(99, 102, 241, 0.2));
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.s-icon {
+  font-size: 14px;
+}
+
+.s-level {
+  color: #c4b5fd;
+  font-weight: bold;
+}
+
 .slot-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 </style>

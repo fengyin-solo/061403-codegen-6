@@ -39,6 +39,25 @@
             :hide="hide"
             :tools="tools"
           />
+          <ShelterPanel
+            :wallLevel="wallLevel"
+            :bedLevel="bedLevel"
+            :storageLevel="storageLevel"
+            :maxLevel="MAX_SHELTER_LEVEL"
+            :blizzardDamageReduction="blizzardDamageReduction"
+            :heatRetentionBonus="heatRetentionBonus"
+            :nightHeatRecovery="nightHeatRecovery"
+            :resourceBonus="resourceBonus"
+            :wallCost="getNextUpgradeCost('wall')"
+            :bedCost="getNextUpgradeCost('bed')"
+            :storageCost="getNextUpgradeCost('storage')"
+            :canUpgradeWall="canUpgradeShelter('wall')"
+            :canUpgradeBed="canUpgradeShelter('bed')"
+            :canUpgradeStorage="canUpgradeShelter('storage')"
+            :isNight="isNight"
+            :gameOver="gameOver"
+            @upgrade="handleUpgrade"
+          />
         </div>
 
         <div class="center-panel">
@@ -101,6 +120,7 @@ import Thermometer from './components/Thermometer.vue'
 import DayNightIndicator from './components/DayNightIndicator.vue'
 import ResourcePanel from './components/ResourcePanel.vue'
 import ActionPanel from './components/ActionPanel.vue'
+import ShelterPanel from './components/ShelterPanel.vue'
 import LogPanel from './components/LogPanel.vue'
 import SaveManager from './components/SaveManager.vue'
 import GameOver from './components/GameOver.vue'
@@ -122,6 +142,17 @@ const {
   isDanger,
   canMakeFire,
   huntSuccessRate,
+  wallLevel,
+  bedLevel,
+  storageLevel,
+  blizzardDamageReduction,
+  heatRetentionBonus,
+  nightHeatRecovery,
+  resourceBonus,
+  canUpgradeShelter,
+  getNextUpgradeCost,
+  upgradeShelter,
+  MAX_SHELTER_LEVEL,
   chopWood,
   hunt,
   makeTools,
@@ -220,6 +251,17 @@ function handleDelete(slotName) {
 
 function handleRestart() {
   restartGame()
+}
+
+function handleUpgrade(type) {
+  const oldLevel = type === 'wall' ? wallLevel.value : type === 'bed' ? bedLevel.value : storageLevel.value
+  const success = upgradeShelter(type)
+  if (success) {
+    const newLevel = type === 'wall' ? wallLevel.value : type === 'bed' ? bedLevel.value : storageLevel.value
+    if (newLevel > oldLevel) {
+      playSuccess()
+    }
+  }
 }
 
 function showSaveManager() {

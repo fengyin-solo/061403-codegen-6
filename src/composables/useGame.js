@@ -14,10 +14,37 @@ export function useGame() {
   const gameOverReason = ref('')
   const actionLog = ref([])
 
+  const wallLevel = ref(0)
+  const bedLevel = ref(0)
+  const storageLevel = ref(0)
+
   const DAY_DURATION = 30000
   const NIGHT_DURATION = 20000
   const HEAT_CONSUMPTION_RATE = 2
   const BLIZZARD_CHANCE = 0.15
+
+  const SHELTER_COSTS = {
+    wall: [
+      { wood: 8, hide: 0, tools: 0 },
+      { wood: 15, hide: 3, tools: 1 },
+      { wood: 25, hide: 8, tools: 3 },
+      { wood: 40, hide: 15, tools: 5 }
+    ],
+    bed: [
+      { wood: 5, hide: 3, tools: 0 },
+      { wood: 10, hide: 8, tools: 1 },
+      { wood: 18, hide: 15, tools: 3 },
+      { wood: 30, hide: 25, tools: 5 }
+    ],
+    storage: [
+      { wood: 10, hide: 2, tools: 0 },
+      { wood: 18, hide: 5, tools: 2 },
+      { wood: 30, hide: 10, tools: 4 },
+      { wood: 50, hide: 20, tools: 7 }
+    ]
+  }
+
+  const MAX_SHELTER_LEVEL = 4
 
   let dayNightTimer = null
   let nightConsumptionTimer = null
@@ -28,6 +55,67 @@ export function useGame() {
   const canMakeFire = computed(() => wood.value >= 3)
   const canHunt = computed(() => tools.value > 0)
   const huntSuccessRate = computed(() => 0.3 + tools.value * 0.15)
+
+  const blizzardDamageReduction = computed(() => {
+    return wallLevel.value * 0.15
+  })
+
+  const heatRetentionBonus = computed(() => {
+    return wallLevel.value * 0.1
+  })
+
+  const nightHeatRecovery = computed(() => {
+    return bedLevel.value * 2
+  })
+
+  const resourceBonus = computed(() => {
+    return 1 + storageLevel.value * 0.15
+  })
+
+  function getNextUpgradeCost(type) {
+    const level = type === 'wall' ? wallLevel.value : type === 'bed' ? bedLevel.value : storageLevel.value
+    if (level >= MAX_SHELTER_LEVEL) return null
+    return SHELTER_COSTS[type][level]
+  }
+
+  function canUpgradeShelter(type) {
+    const cost = getNextUpgradeCost(type)
+    if (!cost) return false
+    return wood.value >= cost.wood && hide.value >= cost.hide && tools.value >= cost.tools
+  }
+
+  function upgradeShelter(type) {
+    if (gameOver.value || isNight.value) return false
+    
+    const cost = getNextUpgradeCost(type)
+    if (!cost) {
+      addLog('已达最高等级！', 'warning')
+      return false
+    }
+    if (!canUpgradeShelter(type)) {
+      addLog('材料不足，无法升级！', 'warning')
+      return false
+    }
+
+    const multiplier = isBlizzard.value ? 2 : 1
+    const tempCost = 10 * multiplier
+
+    wood.value -= cost.wood
+    hide.value -= cost.hide
+    tools.value -= cost.tools
+    temperature.value = Math.max(0, temperature.value - tempCost)
+
+    const names = { wall: '墙体', bed: '床铺', storage: '储物区' }
+    if (type === 'wall') wallLevel.value++
+    if (type === 'bed') bedLevel.value++
+    if (type === 'storage') storageLevel.value++
+
+    const newLevel = type === 'wall' ? wallLevel.value : type === 'bed' ? bedLevel.value : storageLevel.value
+    addLog(`🏗️ ${names[type]}升级到 Lv.${newLevel}！消耗 ${tempCost} 体温`, 'success')
+    
+    checkGameOver()
+    return true
+  }
 
   function addLog(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString()
@@ -52,17 +140,22 @@ export function useGame() {
   function consumeHeat() {
     if (gameOver.value) return
     
-    const multiplier = isBlizzard.value ? 2 : 1
+    let multiplier = isBlizzard.value ? 2 : 1
+    multiplier *= (1 - blizzardDamageReduction.value)
     const consumption = HEAT_CONSUMPTION_RATE * multiplier
     
-    if (heat.value >= consumption) {
-      heat.value -= consumption
+    const heatRetention = 1 + heatRetentionBonus.value
+    const effectiveConsumption = consumption / heatRetention
+    
+    if (heat.value >= effectiveConsumption) {
+      heat.value -= effectiveConsumption
       if (temperature.value < 80) {
-        temperature.value = Math.min(80, temperature.value + 1)
+        const recovery = 1 + nightHeatRecovery.value * 0.5
+        temperature.value = Math.min(80, temperature.value + recovery)
       }
     } else {
       heat.value = 0
-      temperature.value = Math.max(0, temperature.value - consumption)
+      temperature.value = Math.max(0, temperature.value - effectiveConsumption)
       addLog('热量不足！体温正在下降...', 'warning')
     }
     
@@ -107,11 +200,13 @@ export function useGame() {
   function chopWood() {
     if (gameOver.value || isNight.value) return
     
-    const multiplier = isBlizzard.value ? 2 : 1
-    const tempCost = 5 * multiplier
+    let multiplier = isBlizzard.value ? 2 : 1
+    multiplier *= (1 - blizzardDamageReduction.value * 0.5)
+    const tempCost = Math.round(5 * multiplier * 10) / 10
     
     temperature.value = Math.max(0, temperature.value - tempCost)
-    const woodGained = Math.floor(Math.random() * 3) + 2
+    const baseWood = Math.floor(Math.random() * 3) + 2
+    const woodGained = Math.floor(baseWood * resourceBonus.value)
     wood.value += woodGained
     
     addLog(`砍柴：获得 ${woodGained} 木头，消耗 ${tempCost} 体温`, 'action')
@@ -126,14 +221,17 @@ export function useGame() {
   function hunt() {
     if (gameOver.value || isNight.value) return
     
-    const multiplier = isBlizzard.value ? 2 : 1
-    const tempCost = 8 * multiplier
+    let multiplier = isBlizzard.value ? 2 : 1
+    multiplier *= (1 - blizzardDamageReduction.value * 0.5)
+    const tempCost = Math.round(8 * multiplier * 10) / 10
     
     temperature.value = Math.max(0, temperature.value - tempCost)
     
     if (Math.random() < huntSuccessRate.value) {
-      const foodGained = Math.floor(Math.random() * 3) + 2
-      const hideGained = Math.floor(Math.random() * 2) + 1
+      const baseFood = Math.floor(Math.random() * 3) + 2
+      const baseHide = Math.floor(Math.random() * 2) + 1
+      const foodGained = Math.floor(baseFood * resourceBonus.value)
+      const hideGained = Math.floor(baseHide * resourceBonus.value)
       food.value += foodGained
       hide.value += hideGained
       addLog(`狩猎成功：获得 ${foodGained} 食物，${hideGained} 兽皮，消耗 ${tempCost} 体温`, 'success')
@@ -155,8 +253,9 @@ export function useGame() {
       return
     }
     
-    const multiplier = isBlizzard.value ? 2 : 1
-    const tempCost = 6 * multiplier
+    let multiplier = isBlizzard.value ? 2 : 1
+    multiplier *= (1 - blizzardDamageReduction.value * 0.5)
+    const tempCost = Math.round(6 * multiplier * 10) / 10
     
     wood.value -= 2
     hide.value -= 1
@@ -230,6 +329,9 @@ export function useGame() {
       isDay: isDay.value,
       dayCount: dayCount.value,
       isBlizzard: isBlizzard.value,
+      wallLevel: wallLevel.value,
+      bedLevel: bedLevel.value,
+      storageLevel: storageLevel.value,
       savedAt: Date.now()
     }
     localStorage.setItem(`snowSurvival_${slot}`, JSON.stringify(gameState))
@@ -254,6 +356,9 @@ export function useGame() {
       isDay.value = gameState.isDay
       dayCount.value = gameState.dayCount
       isBlizzard.value = gameState.isBlizzard
+      wallLevel.value = gameState.wallLevel || 0
+      bedLevel.value = gameState.bedLevel || 0
+      storageLevel.value = gameState.storageLevel || 0
       gameOver.value = false
       gameOverReason.value = ''
       actionLog.value = []
@@ -284,7 +389,13 @@ export function useGame() {
           slots.push({
             name: slotName,
             dayCount: data.dayCount,
-            savedAt: data.savedAt
+            savedAt: data.savedAt,
+            wallLevel: data.wallLevel || 0,
+            bedLevel: data.bedLevel || 0,
+            storageLevel: data.storageLevel || 0,
+            wood: data.wood || 0,
+            food: data.food || 0,
+            tools: data.tools || 0
           })
         } catch (e) {}
       }
@@ -307,6 +418,9 @@ export function useGame() {
     isDay.value = true
     dayCount.value = 1
     isBlizzard.value = false
+    wallLevel.value = 0
+    bedLevel.value = 0
+    storageLevel.value = 0
     gameOver.value = false
     gameOverReason.value = ''
     actionLog.value = []
@@ -344,6 +458,17 @@ export function useGame() {
     canMakeFire,
     canHunt,
     huntSuccessRate,
+    wallLevel,
+    bedLevel,
+    storageLevel,
+    blizzardDamageReduction,
+    heatRetentionBonus,
+    nightHeatRecovery,
+    resourceBonus,
+    canUpgradeShelter,
+    getNextUpgradeCost,
+    upgradeShelter,
+    MAX_SHELTER_LEVEL,
     chopWood,
     hunt,
     makeTools,
