@@ -1,22 +1,22 @@
 <template>
   <div class="save-manager">
-    <button class="save-btn" @click="showModal = true">
+    <button class="save-btn" @click="openModal">
       💾 存档管理
     </button>
-    
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal-content">
         <div class="modal-header">
           <h3>存档管理</h3>
-          <button class="close-btn" @click="showModal = false">✕</button>
+          <button class="close-btn" @click="closeModal">✕</button>
         </div>
-        
+
         <div class="modal-body">
           <div class="save-actions">
             <div class="manual-save">
-              <input 
-                v-model="newSlotName" 
-                type="text" 
+              <input
+                v-model="newSlotName"
+                type="text"
                 placeholder="输入存档名称..."
                 class="slot-input"
                 @keyup.enter="handleSave"
@@ -24,16 +24,16 @@
               <button class="action-btn save" @click="handleSave">保存</button>
             </div>
           </div>
-          
+
           <div class="save-slots">
             <h4>存档列表</h4>
-            <div v-if="slots.length === 0" class="empty-slots">
+            <div v-if="displaySlots.length === 0" class="empty-slots">
               暂无存档
             </div>
             <div v-else class="slots-list">
-              <div 
-                v-for="slot in slots" 
-                :key="slot.name" 
+              <div
+                v-for="slot in displaySlots"
+                :key="`${slot.name}-${slot.savedAt}-${refreshTick}`"
                 class="slot-item"
               >
                 <div class="slot-main">
@@ -42,31 +42,32 @@
                     <span class="slot-meta">第 {{ slot.dayCount }} 天 · {{ formatDate(slot.savedAt) }}</span>
                   </div>
                   <div class="slot-resources">
-                    <span class="res-item">🪵 {{ slot.wood || 0 }}</span>
-                    <span class="res-item">🍖 {{ slot.food || 0 }}</span>
-                    <span class="res-item">🔪 {{ slot.tools || 0 }}</span>
+                    <span class="res-item">🪵 {{ slot.wood ?? 0 }}</span>
+                    <span class="res-item">🍖 {{ slot.food ?? 0 }}</span>
+                    <span class="res-item">🦊 {{ slot.hide ?? 0 }}</span>
+                    <span class="res-item">🔪 {{ slot.tools ?? 0 }}</span>
                   </div>
                   <div class="slot-shelter">
                     <span class="shelter-badge">
                       <span class="s-icon">🧱</span>
-                      <span class="s-level">Lv.{{ slot.wallLevel || 0 }}</span>
+                      <span class="s-level">Lv.{{ slot.wallLevel ?? 0 }}</span>
                     </span>
                     <span class="shelter-badge">
                       <span class="s-icon">🛏️</span>
-                      <span class="s-level">Lv.{{ slot.bedLevel || 0 }}</span>
+                      <span class="s-level">Lv.{{ slot.bedLevel ?? 0 }}</span>
                     </span>
                     <span class="shelter-badge">
                       <span class="s-icon">📦</span>
-                      <span class="s-level">Lv.{{ slot.storageLevel || 0 }}</span>
+                      <span class="s-level">Lv.{{ slot.storageLevel ?? 0 }}</span>
                     </span>
                   </div>
                 </div>
                 <div class="slot-actions">
-                  <button class="action-btn load" @click="$emit('load', slot.name)">加载</button>
-                  <button 
-                    v-if="slot.name !== 'auto'" 
-                    class="action-btn delete" 
-                    @click="$emit('delete', slot.name)"
+                  <button class="action-btn load" @click="handleLoad(slot.name)">加载</button>
+                  <button
+                    v-if="slot.name !== 'auto'"
+                    class="action-btn delete"
+                    @click="handleDelete(slot.name)"
                   >
                     删除
                   </button>
@@ -81,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 
 const props = defineProps({
   slots: {
@@ -98,20 +99,59 @@ const emit = defineEmits(['save', 'load', 'delete', 'update:show'])
 
 const showModal = ref(props.show)
 const newSlotName = ref('')
+const refreshTick = ref(0)
+
+const displaySlots = computed(() => {
+  const _ = refreshTick.value
+  return Array.isArray(props.slots) ? [...props.slots] : []
+})
 
 watch(() => props.show, (val) => {
   showModal.value = val
 })
 
-watch(showModal, (val) => {
+watch(showModal, async (val) => {
+  if (val) {
+    await nextTick()
+    refreshTick.value++
+  }
   emit('update:show', val)
 })
+
+watch(() => props.slots, () => {
+  refreshTick.value++
+}, { deep: true })
+
+function openModal() {
+  showModal.value = true
+}
+
+function closeModal() {
+  showModal.value = false
+}
 
 function handleSave() {
   if (newSlotName.value.trim()) {
     emit('save', newSlotName.value.trim())
     newSlotName.value = ''
+    nextTick(() => {
+      refreshTick.value++
+    })
   }
+}
+
+function handleLoad(slotName) {
+  emit('load', slotName)
+  nextTick(() => {
+    refreshTick.value++
+  })
+}
+
+function handleDelete(slotName) {
+  emit('delete', slotName)
+  nextTick(() => {
+    refreshTick.value++
+  })
 }
 
 function formatDate(timestamp) {

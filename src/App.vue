@@ -153,6 +153,7 @@ const {
   getNextUpgradeCost,
   upgradeShelter,
   MAX_SHELTER_LEVEL,
+  saveSlots,
   chopWood,
   hunt,
   makeTools,
@@ -160,7 +161,6 @@ const {
   eatFood,
   saveGame,
   loadGame,
-  getSaveSlots,
   deleteSave,
   restartGame
 } = useGame()
@@ -178,8 +178,6 @@ const {
   playBlizzard,
   toggleMute
 } = useAudio()
-
-const saveSlots = computed(() => getSaveSlots())
 
 const gameBgClass = computed(() => ({
   'day-bg': isDay.value && !isBlizzard.value,

@@ -17,6 +17,7 @@ export function useGame() {
   const wallLevel = ref(0)
   const bedLevel = ref(0)
   const storageLevel = ref(0)
+  const saveUpdateSeq = ref(0)
 
   const DAY_DURATION = 30000
   const NIGHT_DURATION = 20000
@@ -334,7 +335,10 @@ export function useGame() {
       storageLevel: storageLevel.value,
       savedAt: Date.now()
     }
-    localStorage.setItem(`snowSurvival_${slot}`, JSON.stringify(gameState))
+    const key = `snowSurvival_${slot}`
+    const payload = JSON.stringify(gameState)
+    localStorage.setItem(key, payload)
+    saveUpdateSeq.value++
     addLog(`游戏已保存到存档位：${slot === 'auto' ? '自动存档' : slot}`, 'info')
   }
 
@@ -344,32 +348,37 @@ export function useGame() {
       addLog('没有找到存档', 'warning')
       return false
     }
-    
+
     try {
       const gameState = JSON.parse(saved)
-      temperature.value = gameState.temperature
-      heat.value = gameState.heat
-      wood.value = gameState.wood
-      food.value = gameState.food
-      hide.value = gameState.hide
-      tools.value = gameState.tools
-      isDay.value = gameState.isDay
-      dayCount.value = gameState.dayCount
-      isBlizzard.value = gameState.isBlizzard
-      wallLevel.value = gameState.wallLevel || 0
-      bedLevel.value = gameState.bedLevel || 0
-      storageLevel.value = gameState.storageLevel || 0
+      temperature.value = gameState.temperature ?? 80
+      heat.value = gameState.heat ?? 50
+      wood.value = gameState.wood ?? 10
+      food.value = gameState.food ?? 5
+      hide.value = gameState.hide ?? 0
+      tools.value = gameState.tools ?? 0
+      isDay.value = gameState.isDay ?? true
+      dayCount.value = gameState.dayCount ?? 1
+      isBlizzard.value = gameState.isBlizzard ?? false
+      wallLevel.value = gameState.wallLevel ?? 0
+      bedLevel.value = gameState.bedLevel ?? 0
+      storageLevel.value = gameState.storageLevel ?? 0
       gameOver.value = false
       gameOverReason.value = ''
       actionLog.value = []
-      
+
       stopTimers()
       startTimers()
-      
+
+      if (nightConsumptionTimer) {
+        clearInterval(nightConsumptionTimer)
+        nightConsumptionTimer = null
+      }
       if (!isDay.value) {
         startNightCycle()
       }
-      
+
+      saveUpdateSeq.value++
       addLog(`成功加载存档：${slot === 'auto' ? '自动存档' : slot}`, 'success')
       return true
     } catch (e) {
@@ -378,14 +387,16 @@ export function useGame() {
     }
   }
 
-  function getSaveSlots() {
+  const saveSlots = computed(() => {
+    const _ = saveUpdateSeq.value
     const slots = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key.startsWith('snowSurvival_')) {
         const slotName = key.replace('snowSurvival_', '')
         try {
-          const data = JSON.parse(localStorage.getItem(key))
+          const raw = localStorage.getItem(key)
+          const data = JSON.parse(raw)
           slots.push({
             name: slotName,
             dayCount: data.dayCount,
@@ -393,18 +404,22 @@ export function useGame() {
             wallLevel: data.wallLevel || 0,
             bedLevel: data.bedLevel || 0,
             storageLevel: data.storageLevel || 0,
-            wood: data.wood || 0,
-            food: data.food || 0,
-            tools: data.tools || 0
+            wood: data.wood ?? 0,
+            food: data.food ?? 0,
+            hide: data.hide ?? 0,
+            tools: data.tools ?? 0,
+            temperature: data.temperature ?? 0
           })
         } catch (e) {}
       }
     }
+    slots.sort((a, b) => b.savedAt - a.savedAt)
     return slots
-  }
+  })
 
   function deleteSave(slot) {
     localStorage.removeItem(`snowSurvival_${slot}`)
+    saveUpdateSeq.value++
     addLog(`已删除存档：${slot}`, 'info')
   }
 
@@ -424,16 +439,32 @@ export function useGame() {
     gameOver.value = false
     gameOverReason.value = ''
     actionLog.value = []
-    
+
     stopTimers()
     startTimers()
-    
+    saveUpdateSeq.value++
+
     addLog('新游戏开始！祝你好运！', 'success')
   }
 
+  function tryLoadAutoSave() {
+    const saved = localStorage.getItem('snowSurvival_auto')
+    if (!saved) return false
+    try {
+      const data = JSON.parse(saved)
+      if (!data || typeof data.dayCount !== 'number') return false
+    } catch (e) {
+      return false
+    }
+    return loadGame('auto')
+  }
+
   onMounted(() => {
-    startTimers()
-    addLog('欢迎来到雪地生存！白天收集资源，夜晚保持温暖。', 'info')
+    const hasAuto = tryLoadAutoSave()
+    if (!hasAuto) {
+      startTimers()
+      addLog('欢迎来到雪地生存！白天收集资源，夜晚保持温暖。', 'info')
+    }
   })
 
   onUnmounted(() => {
@@ -469,6 +500,7 @@ export function useGame() {
     getNextUpgradeCost,
     upgradeShelter,
     MAX_SHELTER_LEVEL,
+    saveSlots,
     chopWood,
     hunt,
     makeTools,
@@ -476,7 +508,6 @@ export function useGame() {
     eatFood,
     saveGame,
     loadGame,
-    getSaveSlots,
     deleteSave,
     restartGame
   }
